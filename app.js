@@ -10,45 +10,56 @@ var registryUrl = process.argv[2];
 var moduleName = process.argv[3];
 var ids = [];
 
-if (moduleName) {
-    processModule(moduleName);
-} else {
-    var i = 0;
-    var stream = request(registryUrl + "/_all_docs")
-	.pipe(JSONStream.parse(['rows', true, 'id']))
-	.pipe(es.mapSync(function (moduleName) {
-	    if (moduleName === "_updated" || moduleName.indexOf('/') !== -1) return;
-	    try {
+try {
+    main(function () {
+	process.exit(0);
+    });
+} catch (e) {
+    console.error("Main failed: ", e);
+    process.exit(1);
+}
+    
+function main(done) {
+    if (moduleName) {
+	processModule(moduleName);
+    } else {
+	var i = 0;
+	var stream = request(registryUrl + "/_all_docs")
+	    .pipe(JSONStream.parse(['rows', true, 'id']))
+	    .pipe(es.mapSync(function (moduleName) {
+		if (moduleName === "_updated" || moduleName.indexOf('/') !== -1) return;
 		ids.push(moduleName)
 		i++;
 		
 		if (i % 100 === 0) {
 		    console.log("Parsed " + i);
 		}
-		
-		//processModule(moduleName);
-	    } catch (e) {
-		console.log("i guess it failed...?")
-	    }
-	}))
-    
-    stream.on('error',function(err){
-	console.error(err);
-	setTimeout(function() {
-	    console.log('sleeping for a while!');
-	}, 60*1000);
-    });
-        
-    stream.on('end', () => {
-	async.eachSeries(ids, function (id, callback) {
-	    processModule(id, callback);
-	}, function (err) {
-	    if (err) { throw err; }
-	    console.log('Well done :-)!');
-	});
+	    }));
 	
-    });
-
+	console.log("Parsed " + i);
+	
+	stream.on('error',function(err){
+	    console.error(err);
+	    setTimeout(function() {
+		console.log('sleeping for a while!');
+	    }, 60*1000);
+	});
+        
+	stream.on('end', () => {
+	    async.eachSeries(ids, function (id, callback) {
+		processModule(id, callback);
+	    }, function (err) {
+		if (err) {
+		    console.log("errr...")
+		} else {
+		    console.log('Well done :-)!');
+		    done();
+		}
+	    });
+	    
+	});
+    }
+   
 }
 
 function processModule(moduleName, callback) {
@@ -57,59 +68,64 @@ function processModule(moduleName, callback) {
     }
     if (fs.readdirSync(path.join("storage", moduleName)).length === 0) {
 	console.log("Directory for " + moduleName + " is empty")
-	
-	request(registryUrl + moduleName, function (error, response, body) {
-
-	    console.log("Requesting " + moduleName)
+	try {
 	    
-            if (error) {
-		console.log("failed here...")
-		console.log(error)
-		return;
-		//return handleError(error);
-            }
-	    
-            var module = JSON.parse(body);
-	    
-            var packageJson = {
-            // standard things
-		name: module.name,
-		versions: module.versions,
-		"dist-tags": module["dist-tags"],
-		
-		// our own object
-		_distfiles: {},
-		_attachments: {},
-		_uplinks: {}
-            };
-	    
-            for (versionNumber in packageJson.versions) {
-		var version = module.versions[versionNumber];
-		
-		delete version.publishConfig;
-		delete version.repository;
-		
-		var tarballUrl = version.dist.tarball;
-		var shasum = version.dist.shasum;
-		
-		version._shasum = shasum;
-		
-		var filename = path.basename(tarballUrl);
-		packageJson._attachments[filename] = { shasum: shasum, version: version.version };
-		request(tarballUrl).pipe(fs.createWriteStream(path.join("storage", moduleName, filename)));
-		version.dist.tarball = tarballUrl.replace(registryUrl, "/");
+	    request(registryUrl + moduleName, function (error, response, body) {
 
-            }
+		console.log("Requesting " + moduleName)
+		
+		if (error) {
+		    console.log(error);
+		    console.log("Request " + moduleName + " failed. Ignore and continue...");
+		    callback();
+		}
+		
+		var module = JSON.parse(body);
+		
+		var packageJson = {
+		    // standard things
+		    name: module.name,
+		    versions: module.versions,
+		    "dist-tags": module["dist-tags"],
+		    
+		    // our own object
+		    _distfiles: {},
+		    _attachments: {},
+		    _uplinks: {}
+		};
+		
+		for (versionNumber in packageJson.versions) {
+		    var version = module.versions[versionNumber];
+		    
+		    delete version.publishConfig;
+		    delete version.repository;
+		    
+		    var tarballUrl = version.dist.tarball;
+		    var shasum = version.dist.shasum;
+		    
+		    version._shasum = shasum;
+		    
+		    var filename = path.basename(tarballUrl);
+		    packageJson._attachments[filename] = { shasum: shasum, version: version.version };
+		    request(tarballUrl).pipe(fs.createWriteStream(path.join("storage", moduleName, filename)));
+		    version.dist.tarball = tarballUrl.replace(registryUrl, "/");
 
-            fs.writeFileSync(path.join("storage", moduleName, "package.json"), JSON.stringify(packageJson, null, "        "));
-	    console.log(module.name + " written")
+		}
 
-	    // Cleanup
-	    delete packageJson;
-	    delete module;
+		fs.writeFileSync(path.join("storage", moduleName, "package.json"), JSON.stringify(packageJson, null, "        "));
+		console.log(module.name + " written")
 
+		// Cleanup
+		delete packageJson;
+		delete module;
+
+		callback();
+	    });
+	} catch (e) {
+	    console.log("i guess it failed...?")
 	    callback();
-	});	
+	}
+	
     } else {
 	console.log(moduleName + " already exists")
 	callback();
