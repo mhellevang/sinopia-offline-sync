@@ -1,6 +1,6 @@
 sinopia-offline-sync
 ===================
 
-I didn't make this. perfectsquircle made this as documented [here](https://github.com/rlidwka/sinopia/issues/79), I just modified it to use streams instead of parsing the whole json file in memory.
+The code generates package.json files for all packages in a central registry into a format compatible with the Sinopia registry. No tarballs will be written, but you'll have a complete collection of available packages.
 
-It imports all packages from a central registry into the sinopia format.
+The project is based on code posted by perfectsquircle [here](https://github.com/rlidwka/sinopia/issues/79). I modified it to use streams instead of parsing the whole json file in memory, and to fetch data in a sequential manner instead of opening a hundred thousand requests at the same time.

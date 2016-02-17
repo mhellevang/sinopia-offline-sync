@@ -3,39 +3,64 @@ var util = require("util");
 var path = require("path");
 var fs = require("fs");
 var JSONStream = require('JSONStream');
-var es = require('event-stream')
+var es = require('event-stream');
+var async = require('async');
 
 var registryUrl = process.argv[2];
 var moduleName = process.argv[3];
+var ids = [];
 
 if (moduleName) {
     processModule(moduleName);
 } else {
+    var i = 0;
     var stream = request(registryUrl + "/_all_docs")
 	.pipe(JSONStream.parse(['rows', true, 'id']))
 	.pipe(es.mapSync(function (moduleName) {
 	    if (moduleName === "_updated" || moduleName.indexOf('/') !== -1) return;
 	    try {
-		processModule(moduleName);
+		ids.push(moduleName)
+		i++;
+		
+		if (i % 100 === 0) {
+		    console.log("Parsed " + i);
+		}
+		
+		//processModule(moduleName);
 	    } catch (e) {
 		console.log("i guess it failed...?")
 	    }
 	}))
-
     
     stream.on('error',function(err){
 	console.error(err);
 	setTimeout(function() {
 	    console.log('sleeping for a while!');
 	}, 60*1000);
-    })
+    });
+        
+    stream.on('end', () => {
+	async.eachSeries(ids, function (id, callback) {
+	    processModule(id, callback);
+	}, function (err) {
+	    if (err) { throw err; }
+	    console.log('Well done :-)!');
+	});
+	
+    });
+
 }
 
-function processModule(moduleName) {
+function processModule(moduleName, callback) {
     if (!fs.existsSync(path.join("storage", moduleName))) {
-        fs.mkdirSync(path.join("storage", moduleName));
+	   fs.mkdirSync(path.join("storage", moduleName));
+    }
+    if (fs.readdirSync(path.join("storage", moduleName)).length === 0) {
+	console.log("Directory for " + moduleName + " is empty")
 	
 	request(registryUrl + moduleName, function (error, response, body) {
+
+	    console.log("Requesting " + moduleName)
 	    
             if (error) {
 		console.log("failed here...")
@@ -82,8 +107,11 @@ function processModule(moduleName) {
 	    // Cleanup
 	    delete packageJson;
 	    delete module;
+
+	    callback();
 	});	
     } else {
 	console.log(moduleName + " already exists")
+	callback();
     }
 }
