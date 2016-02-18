@@ -46,7 +46,7 @@ function main(done) {
 	});
         
 	stream.on('end', () => {
-	    async.eachSeries(ids, function (id, callback) {
+	    async.eachLimit(ids, 10, function (id, callback) {
 		processModule(id, callback);
 	    }, function (err) {
 		if (err) {
@@ -78,6 +78,7 @@ function processModule(moduleName, callback) {
 		    console.log(error);
 		    console.log("Request " + moduleName + " failed. Ignore and continue...");
 		    callback();
+		    return;
 		}
 		
 		var module = JSON.parse(body);
@@ -120,14 +121,18 @@ function processModule(moduleName, callback) {
 		delete module;
 
 		callback();
+		return;
 	    });
 	} catch (e) {
 	    console.log("i guess it failed...?")
 	    callback();
+
 	}
 	
     } else {
 	console.log(moduleName + " already exists")
-	callback();
+	async.setImmediate(function () {
+	    callback();
+	});
     }
 }
