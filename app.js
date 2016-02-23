@@ -21,7 +21,7 @@ try {
     
 function main(done) {
     if (moduleName) {
-	processModule(moduleName);
+	processModule(moduleName, function () {} );
     } else {
 	var i = 0;
 	var stream = request(registryUrl + "/_all_docs")
