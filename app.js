@@ -40,9 +40,6 @@ function main(done) {
 	
 	stream.on('error',function(err){
 	    console.error(err);
-	    setTimeout(function() {
-		console.log('sleeping for a while!');
-	    }, 60*1000);
 	});
         
 	stream.on('end', () => {
@@ -66,10 +63,8 @@ function processModule(moduleName, callback) {
     if (!fs.existsSync(path.join("storage", moduleName))) {
 	   fs.mkdirSync(path.join("storage", moduleName));
     }
-    if (fs.readdirSync(path.join("storage", moduleName)).length === 0) {
-	console.log("Directory for " + moduleName + " is empty")
+    if (fs.readdirSync(path.join("storage", moduleName)).length <= 1) {
 	try {
-	    
 	    request(registryUrl + moduleName, function (error, response, body) {
 
 		console.log("Requesting " + moduleName)
